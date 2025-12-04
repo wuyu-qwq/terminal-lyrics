@@ -9,7 +9,7 @@
 struct CharInfo {
     double startTime;   // 开始时间（秒）
     double endTime;     // 结束时间（秒）
-    char character[4];  // UTF-8编码的单个汉字（3字节+结束符）
+    char character[100];  // 单字
     CharInfo* next;     // 指向下一个节点的指针
 };
 
@@ -104,7 +104,7 @@ bool outLyrics(CharInfo*& cur, short lines) {
 }
 
 int main() {
-	short posx, posy;
+	short posy;
 	// 设置控制台输出编码
 	SetConsoleOutputCP(65001);
 	
@@ -217,7 +217,7 @@ int main() {
         // 输出这个字（UTF-8）
 //        std::cout << cur->character << std::flush;
 		//改变颜色
-		gotoxy(posx, posy);
+		//gotoxy(posx, posy);
 		std::cout << cur->character << std::flush;
 		if (cur->character[0] == '\n') {
 			// 如果光标大于第四行，则滚动歌词
@@ -225,9 +225,6 @@ int main() {
 				rollfin = outLyrics(roll, 4);
 				gotoxy(0, 4);
 			} else posy++;
-    		posx = 0;
-		} else {
-			posx += 2;
 		}
 
         cur = cur->next;
