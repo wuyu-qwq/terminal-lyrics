@@ -1,59 +1,49 @@
 #include <iostream>
-#include <vector>
-#include <string>
-#include <windows.h>
-#include <io.h>
-#include <conio.h>
 #include <fstream>
+#include <cstring>
+#include <cstdio>
+#include <windows.h>
+#include <chrono>
 #include "tinyxml2/tinyxml2.h"
 
-// Êä³öttmlÎÄ¼þÁÐ±íµÄÒ»Ò³
-// ÎÞÒ³ÂëºÏ·¨ÐÔ¼ìÑé
-void outPage(std::vector<std::string>* files, unsigned short pages) {
-	--pages;
-	system("cls");
-	for (unsigned short s=pages*10; s<pages*10+10; ++s) std::cout << s-pages*10 << ' ' << (*files)[s] << std::endl;
-	std::cout << "\nPage:" << pages+1 << " / " << (*files).size()/10+1 << std::endl;
-}
-
 struct CharInfo {
-    double startTime;   // ¿ªÊ¼Ê±¼ä£¨Ãë£©
-    double endTime;     // ½áÊøÊ±¼ä£¨Ãë£©
-    char character[100];  // µ¥×Ö
-    CharInfo* next;     // Ö¸ÏòÏÂÒ»¸ö½ÚµãµÄÖ¸Õë
+    double startTime;   // 开始时间（秒）
+    double endTime;     // 结束时间（秒）
+    char character[100];  // 单字
+    CharInfo* next;     // 指向下一个节点的指针
 };
 
-// Ê±¼ä×Ö·û´®½âÎöº¯Êý
+// 时间字符串解析函数
 double parseTime(const char* timeStr) {
     int minutes = 0;
     int seconds = 0;
     int milliseconds = 0;
     
-    // ½âÎöÊ±¼ä×Ö·û´®
+    // 解析时间字符串
     if (sscanf(timeStr, "%d:%d.%d", &minutes, &seconds, &milliseconds) == 3) {
         return minutes * 60.0 + seconds + milliseconds / 1000.0;
     }
-    // ¼æÈÝ´¦Àí¿ÉÄÜ´æÔÚµÄ¸ñÊ½±äÌå
+    // 兼容处理可能存在的格式变体
     if (sscanf(timeStr, "%d:%d.%d", &minutes, &seconds, &milliseconds) == 3) {
         return minutes * 60.0 + seconds + milliseconds / 1000.0;
     }
-    return 0.0; // ½âÎöÊ§°Ü·µ»Ø0
+    return 0.0; // 解析失败返回0
 }
 
-// ¶ÁÈ¡ÎÄ¼þÄÚÈÝµ½×Ö·û´®
+// 读取文件内容到字符串
 std::string readFileContent(const std::string& filename) {
     std::ifstream file(filename, std::ios::binary);
     if (!file.is_open()) {
-        std::cerr << "ÎÞ·¨´ò¿ªÎÄ¼þ: " << filename << std::endl;
+        std::cerr << "无法打开文件: " << filename << std::endl;
         return "";
     }
     
-    // »ñÈ¡ÎÄ¼þ´óÐ¡
+    // 获取文件大小
     file.seekg(0, std::ios::end);
     size_t size = file.tellg();
     file.seekg(0, std::ios::beg);
     
-    // ·ÖÅäÄÚ´æ²¢¶ÁÈ¡ÄÚÈÝ
+    // 分配内存并读取内容
     std::string content(size, '\0');
     file.read(&content[0], size);
     file.close();
@@ -61,13 +51,13 @@ std::string readFileContent(const std::string& filename) {
     return content;
 }
 
-// ÐÂÔöº¯Êý£º´´½¨Ò»¸ö×Ö·û½Úµã²¢Ìí¼Óµ½Á´±íÄ©Î²
+// 新增函数：创建一个字符节点并添加到链表末尾
 void addCharNode(CharInfo*& head, CharInfo*& tail, double start, double end, const char* text) {
     CharInfo* newNode = new CharInfo;
     
     newNode->startTime = start;
     newNode->endTime = end;
-    // °²È«¸´ÖÆ UTF-8 ×Ö·û£¨×î¶à3×Ö½Úºº×Ö£©
+    // 安全复制 UTF-8 字符（最多3字节汉字）
     strncpy(newNode->character, text, sizeof(newNode->character) - 1);
     newNode->character[sizeof(newNode->character) - 1] = '\0';
     newNode->next = nullptr;
@@ -80,7 +70,7 @@ void addCharNode(CharInfo*& head, CharInfo*& tail, double start, double end, con
     }
 }
 
-// ÒÆ¶¯¿ØÖÆÌ¨¹â±ê
+// 移动控制台光标
 void gotoxy(int x, int y) {
 	COORD pos;
 	pos.X = x, pos.Y = y;
@@ -115,84 +105,49 @@ bool outLyrics(CharInfo*& cur, short lines) {
 
 int main() {
 	short posy;
-	// ÎÄ¼þÃû
-    std::string filename;
-    
-	// Ñ°ÕÒttmlÎÄ¼þ
-	struct _finddata_t fileInfo;
-	std::vector<std::string> ttmlFiles;
-	intptr_t handle = _findfirst(".\\music\\*.ttml", &fileInfo);
-	if (handle != -1L) do ttmlFiles.push_back(fileInfo.name); while (_findnext(handle, &fileInfo) == 0); else {
-		std::cout << "Ã»ÓÐÕÒµ½ttmlÎÄ¼þ£¬ÇëÏÈ½«ttml¸è´ÊÎÄ¼þ·Åµ½musicÄ¿Â¼" << std::endl;
-		return 0;
-	}
-	//for (auto b = ttmlFiles.begin(); b != ttmlFiles.end(); ++b) std::cout << *b << std::endl;
-	_findclose(handle);
-	
-	// Ñ¡ÔñttmlÎÄ¼þ
-	unsigned short pages = 1;
-	outPage(&ttmlFiles, 1);
-	while (1) {
-		if (_kbhit()) {
-			unsigned short key = _getch();
-			// °´ÏÂPageDown¡¢ÓÒ¼ýÍ·¡¢ÏÂ¼ýÍ·Ê±·­Ò³
-			if (key == 224){
-				key = _getch();
-				// °´ÏÂPageDown¡¢ÓÒ¼ýÍ·¡¢ÏÂ¼ýÍ·Ê±ÏÂ·­Ò»Ò³
-				if ((key==80 || key==81 || key==77) && pages*10<ttmlFiles.size()) outPage(&ttmlFiles, ++pages);
-				// °´ÏÂPageUp¡¢×ó¼ýÍ·¡¢ÉÏ¼ýÍ·Ê±ÉÏ·­Ò»Ò³
-				if ((key==72 || key==73 || key==75) && pages > 1) outPage(&ttmlFiles, --pages);
-				// °´ÏÂHome¼üÊ±»Øµ½Ê×Ò³
-				if (key == 71) outPage(&ttmlFiles, pages=1);
-				// °´ÏÂEnd¼üÊ±Ìøµ½Î²Ò³
-				if (key == 79) outPage(&ttmlFiles, pages=ttmlFiles.size()/10+1);
-			} 
-			// °´ÏÂ0µ½9Êý×Ö¼üÊ±Ñ¡Ôñ¸èÇú
-			if (key>=48 && key<=57) {
-				if ((pages-1)*10-(48-key)<ttmlFiles.size()) filename = ".\\music\\"+ttmlFiles[(pages-1)*10-(48-key)];
-				break;
-			}
-    	}
-	}
+	// 设置控制台输出编码
 	SetConsoleOutputCP(65001);
-
-	// ¶ÁÈ¡ÎÄ¼þÄÚÈÝ
+	
+    // 文件名
+    const char* filename = "apoint.ttml";
+    
+    // 读取文件内容
     std::string xmlContent = readFileContent(filename);
     if (xmlContent.empty()) {
-        std::cerr << "ÎÄ¼þÄÚÈÝÎª¿Õ»ò¶ÁÈ¡Ê§°Ü" << std::endl;
+        std::cerr << "文件内容为空或读取失败" << std::endl;
         return 1;
     }
 
-    // ³õÊ¼»¯Á´±í
+    // 初始化链表
     CharInfo* head = nullptr;
     CharInfo* tail = nullptr;
 
-    // ½âÎöXML ...
+    // 解析XML ...
     tinyxml2::XMLDocument doc;
     if (doc.Parse(xmlContent.c_str()) != tinyxml2::XML_SUCCESS) {
-        std::cerr << "XML½âÎöÊ§°Ü! ´íÎó´úÂë: " << doc.ErrorID() << std::endl;
+        std::cerr << "XML解析失败! 错误代码: " << doc.ErrorID() << std::endl;
         return 1;
     }
 
     tinyxml2::XMLElement* tt = doc.FirstChildElement("tt");
     if (!tt) {
-        std::cerr << "Î´ÕÒµ½¸ùÔªËØ <tt>" << std::endl;
+        std::cerr << "未找到根元素 <tt>" << std::endl;
         return 1;
     }
 
     tinyxml2::XMLElement* body = tt->FirstChildElement("body");
     if (!body) {
-        std::cerr << "Î´ÕÒµ½ <body> ÔªËØ" << std::endl;
+        std::cerr << "未找到 <body> 元素" << std::endl;
         return 1;
     }
 
     tinyxml2::XMLElement* div = body->FirstChildElement("div");
     if (!div) {
-        std::cerr << "Î´ÕÒµ½ <div> ÔªËØ" << std::endl;
+        std::cerr << "未找到 <div> 元素" << std::endl;
         return 1;
     }
 
-    // ±éÀúËùÓÐ <p> ¶ÎÂä
+    // 遍历所有 <p> 段落
     tinyxml2::XMLElement* p = div->FirstChildElement("p");
     while (p) {
         tinyxml2::XMLElement* span = p->FirstChildElement("span");
@@ -213,7 +168,7 @@ int main() {
             span = span->NextSiblingElement("span");
         }
 
-        // Èç¹ûÕâ¸ö¶ÎÂäÓÐÄÚÈÝ£¬ÔÚ½áÎ²¼ÓÒ»¸ö»»ÐÐ·û
+        // 如果这个段落有内容，在结尾加一个换行符
         if (hasChars) {
             addNewlineNode(head, tail);
         }
@@ -221,28 +176,28 @@ int main() {
         p = p->NextSiblingElement("p");
     }
 
-    // ÑéÖ¤Êä³ö
-//    std::cout << "½âÎö½á¹û:" << std::endl;
+    // 验证输出
+//    std::cout << "解析结果:" << std::endl;
 //    int count = 0;
 //    CharInfo* current = head;
 //    while (current) {
 //        count++;
-//        printf("×Ö: %s, ¿ªÊ¼: %.3fÃë, ½áÊø: %.3fÃë\n", 
+//        printf("字: %s, 开始: %.3f秒, 结束: %.3f秒\n", 
 //               current->character, 
 //               current->startTime, 
 //               current->endTime);
 //        current = current->next;
 //    }
-//    std::cout << "×Ü¼Æ½âÎö " << count << " ¸ö×Ö" << std::endl;
+//    std::cout << "总计解析 " << count << " 个字" << std::endl;
 
-	// === ÕýÊ½Öð×ÖÊä³ö¸è´Ê ===
+	// === 正式逐字输出歌词 ===
 
-    std::cout << "\n\n===== ¿ªÊ¼Öð×Ö²¥·Å¸è´Ê =====" << std::endl;
-    std::cout << "ÇëÈ·±£¿ØÖÆÌ¨×ÖÌåÖ§³ÖÖÐÎÄ£¨ÈçConsolas¡¢ËÎÌåµÈ£©\n";
-    std::cout << "°´ Enter ¼ü¿ªÊ¼...";
+    std::cout << "\n\n===== 开始逐字播放歌词 =====" << std::endl;
+    std::cout << "请确保控制台字体支持中文（如Consolas、宋体等）\n";
+    std::cout << "按 Enter 键开始...";
     std::cin.get();
 
-    auto programStartTick = GetTickCount();  // µ±Ç°ÏµÍ³Æô¶¯ÒÔÀ´µÄºÁÃëÊý
+    auto programStartTick = GetTickCount();  // 当前系统启动以来的毫秒数
 
     CharInfo* cur = head;
     CharInfo* roll = head;
@@ -259,13 +214,13 @@ int main() {
             Sleep(targetMillis - elapsed);
         }
 
-        // Êä³öÕâ¸ö×Ö£¨UTF-8£©
+        // 输出这个字（UTF-8）
 //        std::cout << cur->character << std::flush;
-		//¸Ä±äÑÕÉ«
+		//改变颜色
 		//gotoxy(posx, posy);
 		std::cout << cur->character << std::flush;
 		if (cur->character[0] == '\n') {
-			// Èç¹û¹â±ê´óÓÚµÚËÄÐÐ£¬Ôò¹ö¶¯¸è´Ê
+			// 如果光标大于第四行，则滚动歌词
 			if (posy >= 4 && !rollfin) {
 				rollfin = outLyrics(roll, 4);
 				gotoxy(0, 4);
@@ -275,9 +230,9 @@ int main() {
         cur = cur->next;
     }
 
-    std::cout << "\n\n?? ²¥·ÅÍê³É£¡" << std::endl;
+    std::cout << "\n\n🎵 播放完成！" << std::endl;
 
-    // ÊÍ·ÅÁ´±íÄÚ´æ
+    // 释放链表内存
     while (head) {
         CharInfo* temp = head;
         head = head->next;
