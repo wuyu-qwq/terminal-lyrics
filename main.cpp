@@ -1,10 +1,20 @@
 #include <iostream>
-#include <fstream>
-#include <cstring>
-#include <cstdio>
+#include <vector>
+#include <string>
 #include <windows.h>
-#include <chrono>
+#include <io.h>
+#include <conio.h>
+#include <fstream>
 #include "tinyxml2/tinyxml2.h"
+
+// 输出ttml文件列表的一页
+// 无页码合法性检验
+void outPage(std::vector<std::string>* files, unsigned short pages) {
+	--pages;
+	system("cls");
+	for (unsigned short s=pages*10; s<pages*10+10; ++s) std::cout << s-pages*10 << ' ' << (*files)[s] << std::endl;
+	std::cout << "\nPage:" << pages+1 << " / " << (*files).size()/10+1 << std::endl;
+}
 
 struct CharInfo {
     double startTime;   // 开始时间（秒）
@@ -105,13 +115,48 @@ bool outLyrics(CharInfo*& cur, short lines) {
 
 int main() {
 	short posy;
-	// 设置控制台输出编码
-	SetConsoleOutputCP(65001);
-	
-    // 文件名
-    const char* filename = "apoint.ttml";
+	// 文件名
+    std::string filename;
     
-    // 读取文件内容
+	// 寻找ttml文件
+	struct _finddata_t fileInfo;
+	std::vector<std::string> ttmlFiles;
+	intptr_t handle = _findfirst(".\\music\\*.ttml", &fileInfo);
+	if (handle != -1L) do ttmlFiles.push_back(fileInfo.name); while (_findnext(handle, &fileInfo) == 0); else {
+		std::cout << "没有找到ttml文件，请先将ttml歌词文件放到music目录" << std::endl;
+		return 0;
+	}
+	//for (auto b = ttmlFiles.begin(); b != ttmlFiles.end(); ++b) std::cout << *b << std::endl;
+	_findclose(handle);
+	
+	// 选择ttml文件
+	unsigned short pages = 1;
+	outPage(&ttmlFiles, 1);
+	while (1) {
+		if (_kbhit()) {
+			unsigned short key = _getch();
+			// 按下PageDown、右箭头、下箭头时翻页
+			if (key == 224){
+				key = _getch();
+				// 按下PageDown、右箭头、下箭头时下翻一页
+				if ((key==80 || key==81 || key==77) && pages*10<ttmlFiles.size()) outPage(&ttmlFiles, ++pages);
+				// 按下PageUp、左箭头、上箭头时上翻一页
+				if ((key==72 || key==73 || key==75) && pages > 1) outPage(&ttmlFiles, --pages);
+				// 按下Home键时回到首页
+				if (key == 71) outPage(&ttmlFiles, pages=1);
+				// 按下End键时跳到尾页
+				if (key == 79) outPage(&ttmlFiles, pages=ttmlFiles.size()/10+1);
+			} 
+			// 按下0到9数字键时选择歌曲
+			if (key>=48 && key<=57) {
+				if ((pages-1)*10-(48-key)<ttmlFiles.size()) filename = ".\\music\\"+ttmlFiles[(pages-1)*10-(48-key)];
+				break;
+			}
+    	}
+	}
+	SetConsoleOutputCP(65001);
+
+	// 读取文件内容
     std::string xmlContent = readFileContent(filename);
     if (xmlContent.empty()) {
         std::cerr << "文件内容为空或读取失败" << std::endl;
