@@ -38,7 +38,7 @@ void gotoxy(int x, int y) {
 void outPage(std::vector<std::string>& files, unsigned short pages) {
 	--pages;
 	system("cls");
-	for (unsigned short s=pages*10; s<pages*10+10; ++s) std::cout << s-pages*10 << ' ' << files[s] << std::endl;
+	for (unsigned short s=pages*10; s<pages*10+10 && s<files.size(); ++s) std::cout << s-pages*10 << ' ' << files[s] << std::endl;
 	std::cout << "\nPage:" << pages+1 << " / " << files.size()/10+1 << std::endl;
 }
 
@@ -188,6 +188,10 @@ int main() {
 //			std::cout << (*t).startTime << " " << (*t).endTime << " " << (*t).character << std::endl;
 //		}
 //	}
+
+	// 隐藏光标
+	CONSOLE_CURSOR_INFO cursor_info = {1, 0};
+	SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursor_info);
 
 	DWORD startTime = GetTickCount();
 	DWORD now = GetTickCount()-startTime;
