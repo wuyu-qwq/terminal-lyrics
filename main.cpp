@@ -134,6 +134,12 @@ int main() {
         std::cerr << "文件内容为空或读取失败" << std::endl;
         return 1;
     }
+    // 处理空格
+    size_t subpos = xmlContent.find("</span> ");
+    while (subpos != std::string::npos) {
+    	xmlContent.replace(subpos, 8, " </span>");
+    	subpos = xmlContent.find("</span> ", subpos+8);
+	}
     // 解析XML ...
     tinyxml2::XMLDocument doc;
     if (doc.Parse(xmlContent.c_str()) != tinyxml2::XML_SUCCESS) {
