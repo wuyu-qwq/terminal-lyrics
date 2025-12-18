@@ -16,7 +16,7 @@
 #define FINCOLOR "\033[90m" // 完成颜色
 #define COLOREND "\033[0m"  // 颜色结束符
 
-#define FLUSH_INTERVAL 10 // 刷新间隔
+#define FLUSH_INTERVAL 50 // 刷新间隔
 
 
 struct CharInfo {
@@ -44,14 +44,15 @@ void outPage(std::vector<std::string>& files, unsigned short pages) {
 
 // 输出一个歌词段落
 void outLyrics(std::vector<std::vector<CharInfo>>& lyrics, unsigned short idx, bool clear) {
-	if (clear) system("cls");
-	gotoxy(0, 0);
+	std::string p;
 	for (unsigned short s=idx; s<idx+DSPLINES; ++s) {
 		for (std::vector<CharInfo>::iterator iter=lyrics[s].begin(); iter!=lyrics[s].end(); ++iter) {
-			std::cout << (*iter).color << (*iter).character << COLOREND;
+			p += (*iter).color + (*iter).character + COLOREND;
 		}
-		std::cout << std::endl;
+		p += '\n';
 	}
+	if (clear) system("cls"); else gotoxy(0, 0);
+	std::cout << p;
 }
 // 时间字符串解析函数
 int parseTime(const char* timeStr) {
@@ -208,7 +209,8 @@ int main() {
 				} else (*iter).color = FINCOLOR;
 			}
 		}
-		if (curIndex-topParaIdx > ROLLINES) {
+		// 判断是否需要滚动
+		if (curIndex-topParaIdx > ROLLINES && topParaIdx+DSPLINES < lyrics.size()) {
 			topParaIdx = curIndex - ROLLINES;
 			outLyrics(lyrics, topParaIdx, true);
 		} else outLyrics(lyrics, topParaIdx, false);
