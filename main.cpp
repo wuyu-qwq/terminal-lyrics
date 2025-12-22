@@ -2,7 +2,7 @@
 #include <vector>
 #include <string>
 #include <windows.h>
-#include <io.h>
+#include <filesystem>
 #include <conio.h>
 #include <fstream>
 
@@ -46,8 +46,8 @@ void outPage(std::vector<std::string>& files, unsigned short pages) {
 void outLyrics(std::vector<std::vector<CharInfo>>& lyrics, unsigned short idx, bool clear) {
 	std::string p;
 	for (unsigned short s=idx; s<idx+DSPLINES; ++s) {
-		for (std::vector<CharInfo>::iterator iter=lyrics[s].begin(); iter!=lyrics[s].end(); ++iter) {
-			p += (*iter).color + (*iter).character + COLOREND;
+		for (CharInfo& iter : lyrics[s]) {
+			p += iter.color + iter.character + COLOREND;
 		}
 		p += '\n';
 	}
@@ -62,10 +62,10 @@ int parseTime(const char* timeStr) {
 }
 
 // 读取文件内容到字符串
-std::string readFileContent(const std::string& filename) {
-    std::ifstream file(filename, std::ios::binary);
+std::string readFileContent(const std::string& filepath) {
+    std::ifstream file(filepath, std::ios::binary);
     if (!file.is_open()) {
-        std::cerr << "无法打开文件: " << filename << std::endl;
+        std::cerr << "无法打开文件: " << filepath << std::endl;
         return "";
     }
     
@@ -82,55 +82,63 @@ std::string readFileContent(const std::string& filename) {
     return content;
 }
 
-int main() {
-    std::string filename;
+int main(int argc, char* argv[]) {
+    std::string filepath = argc>1 ? argv[1] : ".\\music";
     std::vector<std::vector<CharInfo>> lyrics;
     unsigned short topParaIdx;
     unsigned short curIndex;
-    
-	// 寻找ttml文件
-	struct _finddata_t fileInfo;
-	std::vector<std::string> ttmlFiles;
-	intptr_t handle = _findfirst(".\\music\\*.ttml", &fileInfo);
-	if (handle != -1L) do ttmlFiles.push_back(fileInfo.name); while (_findnext(handle, &fileInfo) == 0); else {
-		std::cout << "没有找到ttml文件，请先将ttml歌词文件放到music目录" << std::endl;
-		return 0;
-	}
-	//for (auto b = ttmlFiles.begin(); b != ttmlFiles.end(); ++b) std::cout << *b << std::endl;
-	_findclose(handle);
 	
-	// 选择ttml文件
-	unsigned short pages = 1;
-	outPage(ttmlFiles, 1);
-	while (1) {
-		if (_kbhit()) {
-			unsigned short key = _getch();
-			// 按下PageDown、右箭头、下箭头时翻页
-			if (key == 224){
-				key = _getch();
-				// 按下PageDown、右箭头、下箭头时下翻一页
-				if ((key==80 || key==81 || key==77) && pages*10<ttmlFiles.size()) outPage(ttmlFiles, ++pages);
-				// 按下PageUp、左箭头、上箭头时上翻一页
-				if ((key==72 || key==73 || key==75) && pages > 1) outPage(ttmlFiles, --pages);
-				// 按下Home键时回到首页
-				if (key == 71) outPage(ttmlFiles, pages=1);
-				// 按下End键时跳到尾页
-				if (key == 79) outPage(ttmlFiles, pages=ttmlFiles.size()/10+1);
-			}
-			// 按下0到9数字键时选择歌曲
-			if (key>=48 && key<=57) {
-				if ((pages-1)*10-(48-key)<ttmlFiles.size()) {
-					filename = ".\\music\\"+ttmlFiles[(pages-1)*10-(48-key)];
-					break;
-				}
-			}
-    	}
-    	Sleep(FLUSH_INTERVAL);
-	}
+	// 判断输入参数是文件还是目录
+	if (std::filesystem::exists(filepath)) {
+        if (std::filesystem::is_directory(filepath)) {
+			//std::cout << "检测到输入为目录，正在列出目录下的ttml文件，请选择：" << std::endl;
+            //寻找ttml文件
+            std::vector<std::string> ttmlFiles;
+            for (const auto& entry : std::filesystem::directory_iterator(filepath)) {
+                if (entry.is_regular_file() && entry.path().extension() == ".ttml") {
+                    //std::cout << entry.path() << std::endl;
+                    ttmlFiles.push_back(entry.path().filename().string());
+                }
+            }
+
+            // 选择ttml文件
+            unsigned short pages = 1;
+            outPage(ttmlFiles, 1);
+            while (1) {
+                if (_kbhit()) {
+                    unsigned short key = _getch();
+                    // 按下PageDown、右箭头、下箭头时翻页
+                    if (key == 224){
+                        key = _getch();
+                        // 按下PageDown、右箭头、下箭头时下翻一页
+                        if ((key==80 || key==81 || key==77) && pages*10<ttmlFiles.size()) outPage(ttmlFiles, ++pages);
+                        // 按下PageUp、左箭头、上箭头时上翻一页
+                        if ((key==72 || key==73 || key==75) && pages > 1) outPage(ttmlFiles, --pages);
+                        // 按下Home键时回到首页
+                        if (key == 71) outPage(ttmlFiles, pages=1);
+                        // 按下End键时跳到尾页
+                        if (key == 79) outPage(ttmlFiles, pages=ttmlFiles.size()/10+1);
+                    }
+                    // 按下0到9数字键时选择歌曲
+                    if (key>=48 && key<=57) {
+                        if ((pages-1)*10-(48-key)<ttmlFiles.size()) {
+                            filepath = filepath+"\\"+ttmlFiles[(pages-1)*10-(48-key)];
+                            break;
+                        }
+                    }
+                }
+                Sleep(FLUSH_INTERVAL);
+            }
+        }
+    } else {
+        std::cout << "输入的文件不存在！";
+        return -1;
+    }
+
 	SetConsoleOutputCP(65001);
 
 	// 读取文件内容
-    std::string xmlContent = readFileContent(filename);
+    std::string xmlContent = readFileContent(filepath);
     if (xmlContent.empty()) {
         std::cerr << "文件内容为空或读取失败" << std::endl;
         return 1;
@@ -201,12 +209,12 @@ int main() {
 	while (now <= lyrics.back().back().endTime) {
 		DWORD now = GetTickCount()-startTime;
 		for (unsigned short s=topParaIdx; s<topParaIdx+DSPLINES; ++s) {
-			for (std::vector<CharInfo>::iterator iter=lyrics[s].begin(); iter!=lyrics[s].end(); ++iter) {
-				if (now < (*iter).startTime) (*iter).color = NORCOLOR;
-				else if (now>=(*iter).startTime && now<=(*iter).endTime) {
-					(*iter).color = ACTCOLOR;
+			for (CharInfo& iter : lyrics[s]) {
+				if (now < iter.startTime) iter.color = NORCOLOR;
+				else if (now>=iter.startTime && now<=iter.endTime) {
+					iter.color = ACTCOLOR;
 					curIndex = s;
-				} else (*iter).color = FINCOLOR;
+				} else iter.color = FINCOLOR;
 			}
 		}
 		// 判断是否需要滚动
