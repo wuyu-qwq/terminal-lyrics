@@ -85,8 +85,8 @@ std::string readFileContent(const std::string& filepath) {
 int main(int argc, char* argv[]) {
     std::string filepath = argc>1 ? argv[1] : ".\\music";
     std::vector<std::vector<CharInfo>> lyrics;
-    unsigned short topParaIdx;
-    unsigned short curIndex;
+    unsigned short topParaIdx = 0;
+    unsigned short curIndex   = 0;
 	
 	// 判断输入参数是文件还是目录
 	if (std::filesystem::exists(filepath)) {
@@ -203,11 +203,11 @@ int main(int argc, char* argv[]) {
 	SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursor_info);
 
 	DWORD startTime = GetTickCount();
-	DWORD now = GetTickCount()-startTime;
+	DWORD now;
 	system("cls");
 //	std::cout << lyrics.back().back().endTime << std::endl;
-	while (now <= lyrics.back().back().endTime) {
-		DWORD now = GetTickCount()-startTime;
+	while ((now = GetTickCount() - startTime) <= lyrics.back().back().endTime) {
+		//DWORD now = GetTickCount()-startTime;
 		for (unsigned short s=topParaIdx; s<topParaIdx+DSPLINES; ++s) {
 			for (CharInfo& iter : lyrics[s]) {
 				if (now < iter.startTime) iter.color = NORCOLOR;
