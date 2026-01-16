@@ -41,11 +41,11 @@ void gotoxy(int x, int y) {
 }
 
 // 输出ttml文件列表的一页
-// 无页码合法性检验
 void outPage(std::vector<std::string>& files, unsigned short pages) {
 	--pages;
 	system("cls");
-	for (unsigned short s=pages*10; s<pages*10+10 && s<files.size(); ++s) std::cout << s-pages*10 << ' ' << files[s] << std::endl;
+	for (unsigned short s=pages*10; s<pages*10+10 && s<files.size(); ++s) 
+        std::cout << s-pages*10 << ' ' << files[s] << std::endl;
 	std::cout << "\nPage:" << pages+1 << " / " << files.size()/10+1 << std::endl;
 }
 
@@ -53,13 +53,15 @@ void outPage(std::vector<std::string>& files, unsigned short pages) {
 void outLyrics(std::vector<Para>& lyrics, unsigned short idx, bool clear) {
 	std::string p;
 	for (unsigned short s=idx; s<idx+DSPLINES; ++s) {
-		for (CharInfo& iter : lyrics[s].characters) {
-			p += iter.color + iter.character + COLOREND;
-		}
-		p += '\n';
+        if (s < lyrics.size()) {
+            for (CharInfo& iter : lyrics[s].characters) {
+                p += iter.color + iter.character + COLOREND;
+            }
+        }
+		p += "\033[K\n";
 	}
 	if (clear) system("cls"); else gotoxy(0, 0);
-	std::cout << p;
+	std::cout << p << std::flush;
 }
 
 // 时间字符串解析函数
@@ -73,21 +75,13 @@ int parseTime(const char* timeStr) {
 std::string readFileContent(const std::string& filestr) {
     std::filesystem::path filepath = std::filesystem::u8path(filestr);
     std::ifstream file(filepath, std::ios::binary);
-    if (!file.is_open()) {
-        std::cerr << "无法打开文件: " << filepath << std::endl;
-        return "";
-    }
-    
-    // 获取文件大小
+    if (!file.is_open()) return "";
     file.seekg(0, std::ios::end);
     size_t size = file.tellg();
     file.seekg(0, std::ios::beg);
-    
-    // 分配内存并读取内容
     std::string content(size, '\0');
     file.read(&content[0], size);
     file.close();
-    
     return content;
 }
 
@@ -95,22 +89,21 @@ int main(int argc, char* argv[]) {
     SetConsoleOutputCP(65001);
 
     std::string filepath = argc>1 ? argv[1] : ".\\music";
-    std::vector<Para> lyrics;///////////////////////////////////////////////
+    std::vector<Para> lyrics;
     unsigned short topParaIdx = 0;
     unsigned short curIndex   = 0;
 	
 	// 判断输入参数是文件还是目录
 	if (std::filesystem::exists(filepath)) {
         if (std::filesystem::is_directory(filepath)) {
-			//std::cout << "检测到输入为目录，正在列出目录下的ttml文件，请选择：" << std::endl;
             //寻找ttml文件
             std::vector<std::string> ttmlFiles;
             for (const auto& entry : std::filesystem::directory_iterator(filepath)) {
                 if (entry.is_regular_file() && entry.path().extension() == ".ttml") {
-                    //std::cout << entry.path() << std::endl;
                     ttmlFiles.push_back(entry.path().filename().string());
                 }
             }
+            if (ttmlFiles.empty()) std::cout << "该目录下没有ttml文件" << std::endl; return 0;
 
             // 选择ttml文件
             unsigned short pages = 1;
@@ -165,64 +158,66 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     tinyxml2::XMLElement* tt = doc.FirstChildElement("tt");
-    if (!tt) {
-        std::cerr << "未找到根元素 <tt>" << std::endl;
-        return 1;
-    }
+    if (!tt) { std::cerr << "格式错误: 缺少 <tt>" << std::endl; return 1; }
     tinyxml2::XMLElement* body = tt->FirstChildElement("body");
-    if (!body) {
-        std::cerr << "未找到 <body> 元素" << std::endl;
-        return 1;
-    }
+    if (!body) { std::cerr << "格式错误: 缺少 <body>" << std::endl; return 1; }
     tinyxml2::XMLElement* div = body->FirstChildElement("div");
-    if (!div) {
-        std::cerr << "未找到 <div> 元素" << std::endl;
-        return 1;
-    }
-    // 遍历所有 <p> 段落
+    if (!div) { std::cerr << "格式错误: 缺少 <div>" << std::endl; return 1; }
+
     tinyxml2::XMLElement* p = div->FirstChildElement("p");
     while (p) {
         Para singlePara;
     	std::vector<CharInfo> single;
-        const std::string agentAttr = p->Attribute("ttm:agent");
-        singlePara.paraPos = agentAttr == "v2" ? true : false;
+        
+        const char* agentAttrRaw = p->Attribute("ttm:agent");
+        std::string agentAttr = agentAttrRaw ? agentAttrRaw : "";
+        singlePara.paraPos = (agentAttr == "v2");
+
         tinyxml2::XMLElement* span = p->FirstChildElement("span");
-        unsigned int start, end;
         while (span) {
             const char* beginAttr = span->Attribute("begin");
             const char* endAttr = span->Attribute("end");
             const char* text = span->GetText();
+            
+            // 确保文本存在且不为空
             if (beginAttr && endAttr && text && strlen(text) > 0) {
-                start = parseTime(beginAttr);
-                end = parseTime(endAttr);
+                unsigned int start = parseTime(beginAttr);
+                unsigned int end = parseTime(endAttr);
     			single.push_back(CharInfo{start, end, text});
-                span = span->NextSiblingElement("span");
             }
+            span = span->NextSiblingElement("span");
         }
-        //lyrics.push_back(single);
-        singlePara.characters = single;
-        lyrics.push_back(singlePara);
-        single.clear();
+        
+        if (!single.empty()) {
+            singlePara.characters = single;
+            lyrics.push_back(singlePara);
+        }
+        
         p = p->NextSiblingElement("p");
     }
-    // 验证输出
-//	for (std::vector<std::vector<CharInfo>>::iterator i=lyrics.begin(); i!=lyrics.end(); ++i) {
-//		for (std::vector<CharInfo>::iterator t=(*i).begin(); t!=(*i).end(); ++t) {
-//			std::cout << (*t).startTime << " " << (*t).endTime << " " << (*t).character << std::endl;
-//		}
-//	}
 
-	// 隐藏光标
+    if (lyrics.empty()) {
+        std::cout << "未解析到有效歌词数据！" << std::endl;
+        return 0;
+    }
+
 	CONSOLE_CURSOR_INFO cursor_info = {1, 0};
 	SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursor_info);
 
 	const DWORD startTime = GetTickCount();
 	DWORD now;
 	system("cls");
-//	std::cout << lyrics.back().back().endTime << std::endl;
-	while ((now = GetTickCount() - startTime) <= lyrics.back().characters.back().endTime) {
-		//DWORD now = GetTickCount()-startTime;
+
+    // 计算结束时间 (最后一行最后一个字的结束时间)
+    unsigned int finalTime = 0;
+    if (!lyrics.empty() && !lyrics.back().characters.empty()) {
+        finalTime = lyrics.back().characters.back().endTime;
+    }
+
+	while ((now = GetTickCount() - startTime) <= finalTime + 1000) { // +1000ms 缓冲
 		for (unsigned short s=topParaIdx; s<topParaIdx+DSPLINES; ++s) {
+            if (s >= lyrics.size()) break;
+
 			for (CharInfo& iter : lyrics[s].characters) {
 				if (now < iter.startTime) iter.color = NORCOLOR;
 				else if (now>=iter.startTime && now<=iter.endTime) {
@@ -231,11 +226,13 @@ int main(int argc, char* argv[]) {
 				} else iter.color = FINCOLOR;
 			}
 		}
-		// 判断是否需要滚动
+
 		if (curIndex-topParaIdx > ROLLINES && topParaIdx+DSPLINES < lyrics.size()) {
 			topParaIdx = curIndex - ROLLINES;
 			outLyrics(lyrics, topParaIdx, true);
-		} else outLyrics(lyrics, topParaIdx, false);
+		} else {
+            outLyrics(lyrics, topParaIdx, false);
+        }
 		Sleep(FLUSH_INTERVAL);
 	}
 
