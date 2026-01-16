@@ -1,23 +1,24 @@
 #include <iostream>
+#include <fstream>
+#include <filesystem>
+#include <windows.h>
+#include <conio.h>
 #include <vector>
 #include <string>
-#include <windows.h>
-#include <filesystem>
-#include <conio.h>
-#include <fstream>
 
 #include "tinyxml2/tinyxml2.h"
+#include "getStringWidthInConsole.hpp"
 
 #define DSPLINES 15 // 显示行数
 #define ROLLINES 10 // 滚动行数
-#define WIDTH    20 // 歌词宽度
+#define WIDTH    40 // 歌词宽度
  
 #define NORCOLOR "\033[37m" // 常规颜色
 #define ACTCOLOR "\033[32m" // 活动颜色
 #define FINCOLOR "\033[90m" // 完成颜色
 #define COLOREND "\033[0m"  // 颜色结束符
 
-#define FLUSH_INTERVAL 50 // 刷新间隔
+#define FLUSH_INTERVAL 20 // 刷新间隔
 
 
 struct CharInfo {
@@ -29,16 +30,9 @@ struct CharInfo {
 
 struct Para {
     bool paraPos; // 段落位置，true为居右
+    unsigned short length; // 这行歌词在控制台中占据的字符宽度
     std::vector<CharInfo> characters;
 };
-
-
-// 移动控制台光标
-void gotoxy(int x, int y) {
-	COORD pos;
-	pos.X = x, pos.Y = y;
-	SetConsoleCursorPosition(GetStdHandle(STD_OUTPUT_HANDLE), pos);
-}
 
 // 输出ttml文件列表的一页
 void outPage(std::vector<std::string>& files, unsigned short pages) {
@@ -50,9 +44,11 @@ void outPage(std::vector<std::string>& files, unsigned short pages) {
 }
 
 // 输出一个歌词片段
-void outLyrics(std::vector<Para>& lyrics, unsigned short idx, bool clear) {
+void outLyrics(std::vector<Para>& lyrics, unsigned short idx) {
 	std::string p;
 	for (unsigned short s=idx; s<idx+DSPLINES; ++s) {
+        if (lyrics[s].paraPos)
+            for (unsigned short j=lyrics[s].length; j<=WIDTH; ++j) p+=" ";
         if (s < lyrics.size()) {
             for (CharInfo& iter : lyrics[s].characters) {
                 p += iter.color + iter.character + COLOREND;
@@ -60,8 +56,7 @@ void outLyrics(std::vector<Para>& lyrics, unsigned short idx, bool clear) {
         }
 		p += "\033[K\n";
 	}
-	if (clear) system("cls"); else gotoxy(0, 0);
-	std::cout << p << std::flush;
+	std::cout << p << "\033[H" << std::flush;
 }
 
 // 时间字符串解析函数
@@ -69,6 +64,15 @@ int parseTime(const char* timeStr) {
 	unsigned int minutes, seconds, milliseconds;
     if (sscanf(timeStr, "%d:%d.%d", &minutes, &seconds, &milliseconds)==3) return minutes*60000 + seconds*1000 + milliseconds;
     return 0; // 解析失败返回0
+}
+
+// 计算单行歌词在控制台中所占的字符宽度
+unsigned short clacWidth(std::vector<CharInfo>& line) {
+    std::string s;
+    for (CharInfo& iter : line) {
+        s += iter.character;
+    }
+    return console_width(s);
 }
 
 // 读取文件内容到字符串
@@ -103,7 +107,7 @@ int main(int argc, char* argv[]) {
                     ttmlFiles.push_back(entry.path().filename().string());
                 }
             }
-            if (ttmlFiles.empty()) std::cout << "该目录下没有ttml文件" << std::endl; return 0;
+            if (ttmlFiles.empty()) { std::cout << "该目录下没有ttml文件" << std::endl; return 0; }
 
             // 选择ttml文件
             unsigned short pages = 1;
@@ -171,7 +175,7 @@ int main(int argc, char* argv[]) {
         
         const char* agentAttrRaw = p->Attribute("ttm:agent");
         std::string agentAttr = agentAttrRaw ? agentAttrRaw : "";
-        singlePara.paraPos = (agentAttr == "v2");
+        singlePara.paraPos = (agentAttr == "v1");
 
         tinyxml2::XMLElement* span = p->FirstChildElement("span");
         while (span) {
@@ -190,6 +194,7 @@ int main(int argc, char* argv[]) {
         
         if (!single.empty()) {
             singlePara.characters = single;
+            singlePara.length = clacWidth(single);
             lyrics.push_back(singlePara);
         }
         
@@ -201,6 +206,7 @@ int main(int argc, char* argv[]) {
         return 0;
     }
 
+    // 隐藏控制台光标
 	CONSOLE_CURSOR_INFO cursor_info = {1, 0};
 	SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursor_info);
 
@@ -210,9 +216,8 @@ int main(int argc, char* argv[]) {
 
     // 计算结束时间 (最后一行最后一个字的结束时间)
     unsigned int finalTime = 0;
-    if (!lyrics.empty() && !lyrics.back().characters.empty()) {
+    if (!lyrics.empty() && !lyrics.back().characters.empty()) 
         finalTime = lyrics.back().characters.back().endTime;
-    }
 
 	while ((now = GetTickCount() - startTime) <= finalTime + 1000) { // +1000ms 缓冲
 		for (unsigned short s=topParaIdx; s<topParaIdx+DSPLINES; ++s) {
@@ -229,13 +234,14 @@ int main(int argc, char* argv[]) {
 
 		if (curIndex-topParaIdx > ROLLINES && topParaIdx+DSPLINES < lyrics.size()) {
 			topParaIdx = curIndex - ROLLINES;
-			outLyrics(lyrics, topParaIdx, true);
+			outLyrics(lyrics, topParaIdx);
 		} else {
-            outLyrics(lyrics, topParaIdx, false);
+            outLyrics(lyrics, topParaIdx);
         }
 		Sleep(FLUSH_INTERVAL);
 	}
 
-    std::cout << "\n\n🎵 播放完成！" << std::endl;
+    for (unsigned short s=1; s-1<=DSPLINES; ++s) std::cout << "\n";
+    std::cout << "🎵 播放完成！" << std::endl;
     return 0;
 }
