@@ -10,6 +10,7 @@
 
 #define DSPLINES 15 // 显示行数
 #define ROLLINES 10 // 滚动行数
+#define WIDTH    20 // 歌词宽度
  
 #define NORCOLOR "\033[37m" // 常规颜色
 #define ACTCOLOR "\033[32m" // 活动颜色
@@ -25,6 +26,12 @@ struct CharInfo {
     std::string character;
     std::string color = NORCOLOR;
 };
+
+struct Para {
+    bool paraPos; // 段落位置，true为居右
+    std::vector<CharInfo> characters;
+};
+
 
 // 移动控制台光标
 void gotoxy(int x, int y) {
@@ -42,11 +49,11 @@ void outPage(std::vector<std::string>& files, unsigned short pages) {
 	std::cout << "\nPage:" << pages+1 << " / " << files.size()/10+1 << std::endl;
 }
 
-// 输出一个歌词段落
-void outLyrics(std::vector<std::vector<CharInfo>>& lyrics, unsigned short idx, bool clear) {
+// 输出一个歌词片段
+void outLyrics(std::vector<Para>& lyrics, unsigned short idx, bool clear) {
 	std::string p;
 	for (unsigned short s=idx; s<idx+DSPLINES; ++s) {
-		for (CharInfo& iter : lyrics[s]) {
+		for (CharInfo& iter : lyrics[s].characters) {
 			p += iter.color + iter.character + COLOREND;
 		}
 		p += '\n';
@@ -54,6 +61,7 @@ void outLyrics(std::vector<std::vector<CharInfo>>& lyrics, unsigned short idx, b
 	if (clear) system("cls"); else gotoxy(0, 0);
 	std::cout << p;
 }
+
 // 时间字符串解析函数
 int parseTime(const char* timeStr) {
 	unsigned int minutes, seconds, milliseconds;
@@ -62,7 +70,8 @@ int parseTime(const char* timeStr) {
 }
 
 // 读取文件内容到字符串
-std::string readFileContent(const std::string& filepath) {
+std::string readFileContent(const std::string& filestr) {
+    std::filesystem::path filepath = std::filesystem::u8path(filestr);
     std::ifstream file(filepath, std::ios::binary);
     if (!file.is_open()) {
         std::cerr << "无法打开文件: " << filepath << std::endl;
@@ -83,8 +92,10 @@ std::string readFileContent(const std::string& filepath) {
 }
 
 int main(int argc, char* argv[]) {
+    SetConsoleOutputCP(65001);
+
     std::string filepath = argc>1 ? argv[1] : ".\\music";
-    std::vector<std::vector<CharInfo>> lyrics;
+    std::vector<Para> lyrics;///////////////////////////////////////////////
     unsigned short topParaIdx = 0;
     unsigned short curIndex   = 0;
 	
@@ -135,8 +146,6 @@ int main(int argc, char* argv[]) {
         return -1;
     }
 
-	SetConsoleOutputCP(65001);
-
 	// 读取文件内容
     std::string xmlContent = readFileContent(filepath);
     if (xmlContent.empty()) {
@@ -173,7 +182,10 @@ int main(int argc, char* argv[]) {
     // 遍历所有 <p> 段落
     tinyxml2::XMLElement* p = div->FirstChildElement("p");
     while (p) {
+        Para singlePara;
     	std::vector<CharInfo> single;
+        const std::string agentAttr = p->Attribute("ttm:agent");
+        singlePara.paraPos = agentAttr == "v2" ? true : false;
         tinyxml2::XMLElement* span = p->FirstChildElement("span");
         unsigned int start, end;
         while (span) {
@@ -183,11 +195,13 @@ int main(int argc, char* argv[]) {
             if (beginAttr && endAttr && text && strlen(text) > 0) {
                 start = parseTime(beginAttr);
                 end = parseTime(endAttr);
-				single.push_back(CharInfo{start, end, text});
+    			single.push_back(CharInfo{start, end, text});
+                span = span->NextSiblingElement("span");
             }
-            span = span->NextSiblingElement("span");
         }
-        lyrics.push_back(single);
+        //lyrics.push_back(single);
+        singlePara.characters = single;
+        lyrics.push_back(singlePara);
         single.clear();
         p = p->NextSiblingElement("p");
     }
@@ -202,14 +216,14 @@ int main(int argc, char* argv[]) {
 	CONSOLE_CURSOR_INFO cursor_info = {1, 0};
 	SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursor_info);
 
-	DWORD startTime = GetTickCount();
+	const DWORD startTime = GetTickCount();
 	DWORD now;
 	system("cls");
 //	std::cout << lyrics.back().back().endTime << std::endl;
-	while ((now = GetTickCount() - startTime) <= lyrics.back().back().endTime) {
+	while ((now = GetTickCount() - startTime) <= lyrics.back().characters.back().endTime) {
 		//DWORD now = GetTickCount()-startTime;
 		for (unsigned short s=topParaIdx; s<topParaIdx+DSPLINES; ++s) {
-			for (CharInfo& iter : lyrics[s]) {
+			for (CharInfo& iter : lyrics[s].characters) {
 				if (now < iter.startTime) iter.color = NORCOLOR;
 				else if (now>=iter.startTime && now<=iter.endTime) {
 					iter.color = ACTCOLOR;
