@@ -175,7 +175,7 @@ int main(int argc, char* argv[]) {
         
         const char* agentAttrRaw = p->Attribute("ttm:agent");
         std::string agentAttr = agentAttrRaw ? agentAttrRaw : "";
-        singlePara.paraPos = (agentAttr == "v1");
+        singlePara.paraPos = (agentAttr == "v2");
 
         tinyxml2::XMLElement* span = p->FirstChildElement("span");
         while (span) {
