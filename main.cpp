@@ -11,7 +11,7 @@
 
 #define DSPLINES 15 // 显示行数
 #define ROLLINES 10 // 滚动行数
-#define WIDTH    60 // 歌词宽度
+//#define WIDTH    60 // 歌词宽度
  
 #define NORCOLOR "\033[37m" // 常规颜色
 #define ACTCOLOR "\033[32m" // 活动颜色
@@ -20,6 +20,7 @@
 
 #define FLUSH_INTERVAL 20 // 刷新间隔
 
+unsigned short width;
 
 struct CharInfo {
     unsigned int startTime;
@@ -49,7 +50,7 @@ void outPage(std::vector<std::string>& files, unsigned short pages) {
 void outLyrics(std::vector<Para>& lyrics, unsigned short idx) {
 	std::string p;
 	for (unsigned short s=idx; s<idx+DSPLINES; ++s) {
-        if (lyrics[s].paraPos) p.append(WIDTH-lyrics[s].length, ' ');
+        if (lyrics[s].paraPos) p.append(width-lyrics[s].length, ' ');
         if (s < lyrics.size()) {
             for (CharInfo& iter : lyrics[s].characters) {
                 p += iter.color + iter.character + COLOREND;
@@ -217,8 +218,10 @@ int main(int argc, char* argv[]) {
     }
 
     // 计算歌词的最大宽度
-    // unsigned short width;
-    // for (Para& iter : lyrics) if (iter.length > width) width = iter.length;
+    for (Para& iter : lyrics) if (iter.length > width && iter.paraPos) 
+        width = iter.length;
+
+    width += 5;
 
     // 隐藏控制台光标
 	CONSOLE_CURSOR_INFO cursor_info = {1, 0};
