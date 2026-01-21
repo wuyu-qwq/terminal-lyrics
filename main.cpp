@@ -7,11 +7,11 @@
 #include <string>
 
 #include "tinyxml2/tinyxml2.h"
-#include "getStringWidthInConsole.hpp"
+#include "getStringWidthInTerminal.hpp"
 
 #define DSPLINES 15 // 显示行数
 #define ROLLINES 10 // 滚动行数
-#define WIDTH    40 // 歌词宽度
+#define WIDTH    60 // 歌词宽度
  
 #define NORCOLOR "\033[37m" // 常规颜色
 #define ACTCOLOR "\033[32m" // 活动颜色
@@ -31,6 +31,8 @@ struct CharInfo {
 struct Para {
     bool paraPos; // 段落位置，true为居右
     unsigned short length; // 这行歌词在控制台中占据的字符宽度
+    unsigned int startTime;
+    unsigned int endTime;
     std::vector<CharInfo> characters;
 };
 
@@ -47,8 +49,7 @@ void outPage(std::vector<std::string>& files, unsigned short pages) {
 void outLyrics(std::vector<Para>& lyrics, unsigned short idx) {
 	std::string p;
 	for (unsigned short s=idx; s<idx+DSPLINES; ++s) {
-        if (lyrics[s].paraPos)
-            for (unsigned short j=lyrics[s].length; j<=WIDTH; ++j) p+=" ";
+        if (lyrics[s].paraPos) p.append(WIDTH-lyrics[s].length, ' ');
         if (s < lyrics.size()) {
             for (CharInfo& iter : lyrics[s].characters) {
                 p += iter.color + iter.character + COLOREND;
@@ -180,21 +181,30 @@ int main(int argc, char* argv[]) {
         tinyxml2::XMLElement* span = p->FirstChildElement("span");
         while (span) {
             const char* beginAttr = span->Attribute("begin");
-            const char* endAttr = span->Attribute("end");
-            const char* text = span->GetText();
+            const char* endAttr   = span->Attribute("end");
+            const char* text      = span->GetText();
             
             // 确保文本存在且不为空
             if (beginAttr && endAttr && text && strlen(text) > 0) {
                 unsigned int start = parseTime(beginAttr);
-                unsigned int end = parseTime(endAttr);
+                unsigned int end   = parseTime(endAttr);
     			single.push_back(CharInfo{start, end, text});
             }
             span = span->NextSiblingElement("span");
         }
         
         if (!single.empty()) {
-            singlePara.characters = single;
-            singlePara.length = clacWidth(single);
+            const char* agentAttrRaw = p->Attribute("ttm:agent");
+            const char* ParaBegin    = p->Attribute("begin");
+            const char* ParaEnd      = p->Attribute("end");
+            std::string agentAttr    = agentAttrRaw ? agentAttrRaw : "";
+
+            singlePara.paraPos       = (agentAttr == "v2");
+            singlePara.startTime     = parseTime(ParaBegin);
+            singlePara.endTime       = parseTime(ParaEnd);
+            singlePara.characters    = single;
+            singlePara.length        = clacWidth(single);
+
             lyrics.push_back(singlePara);
         }
         
@@ -205,6 +215,10 @@ int main(int argc, char* argv[]) {
         std::cout << "未解析到有效歌词数据！" << std::endl;
         return 0;
     }
+
+    // 计算歌词的最大宽度
+    // unsigned short width;
+    // for (Para& iter : lyrics) if (iter.length > width) width = iter.length;
 
     // 隐藏控制台光标
 	CONSOLE_CURSOR_INFO cursor_info = {1, 0};
@@ -219,9 +233,10 @@ int main(int argc, char* argv[]) {
     if (!lyrics.empty() && !lyrics.back().characters.empty()) 
         finalTime = lyrics.back().characters.back().endTime;
 
-	while ((now = GetTickCount() - startTime) <= finalTime + 1000) { // +1000ms 缓冲
+	while ((now = GetTickCount() - startTime) <= finalTime + 1000) {
 		for (unsigned short s=topParaIdx; s<topParaIdx+DSPLINES; ++s) {
             if (s >= lyrics.size()) break;
+            if (now < lyrics[s].startTime || now > lyrics[s].endTime + 50) continue;
 
 			for (CharInfo& iter : lyrics[s].characters) {
 				if (now < iter.startTime) iter.color = NORCOLOR;
@@ -235,9 +250,7 @@ int main(int argc, char* argv[]) {
 		if (curIndex-topParaIdx > ROLLINES && topParaIdx+DSPLINES < lyrics.size()) {
 			topParaIdx = curIndex - ROLLINES;
 			outLyrics(lyrics, topParaIdx);
-		} else {
-            outLyrics(lyrics, topParaIdx);
-        }
+		} else outLyrics(lyrics, topParaIdx);
 		Sleep(FLUSH_INTERVAL);
 	}
 
