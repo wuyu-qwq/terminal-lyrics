@@ -26,15 +26,17 @@ struct CharInfo {
     unsigned int startTime;
     unsigned int endTime;
     std::string character;
-    std::string color = NORCOLOR;
+    std::string color = NORCOLOR; // 当前字符的颜色（实时计算）
 };
 
 struct Para {
-    bool paraPos; // 段落位置，true为居右
-    unsigned short length; // 这行歌词在控制台中占据的字符宽度
+    bool paraPos;              // 段落位置，true为居右
+    unsigned short status = 2; // 这个段落的状态（0播放完毕1未播放）
+    unsigned short length;     // 这行歌词在控制台中占据的字符宽度
     unsigned int startTime;
     unsigned int endTime;
     std::vector<CharInfo> characters;
+    std::string text;
 };
 
 // 输出ttml文件列表的一页
@@ -51,10 +53,11 @@ void outLyrics(std::vector<Para>& lyrics, unsigned short idx) {
 	std::string p;
 	for (unsigned short s=idx; s<idx+DSPLINES; ++s) {
         if (lyrics[s].paraPos) p.append(width-lyrics[s].length, ' ');
-        if (s < lyrics.size()) {
-            for (CharInfo& iter : lyrics[s].characters) {
+        if (!lyrics[s].status) p += FINCOLOR + lyrics[s].text + COLOREND;
+        else if (lyrics[s].status == 1) p += NORCOLOR + lyrics[s].text + COLOREND;
+        else if (s < lyrics.size()) {
+            for (CharInfo& iter : lyrics[s].characters) 
                 p += iter.color + iter.character + COLOREND;
-            }
         }
 		p += "\033[K\n";
 	}
@@ -64,17 +67,9 @@ void outLyrics(std::vector<Para>& lyrics, unsigned short idx) {
 // 时间字符串解析函数
 int parseTime(const char* timeStr) {
 	unsigned int minutes, seconds, milliseconds;
-    if (sscanf(timeStr, "%d:%d.%d", &minutes, &seconds, &milliseconds)==3) return minutes*60000 + seconds*1000 + milliseconds;
+    if (sscanf(timeStr, "%d:%d.%d", &minutes, &seconds, &milliseconds)==3)
+        return minutes*60000 + seconds*1000 + milliseconds;
     return 0; // 解析失败返回0
-}
-
-// 计算单行歌词在控制台中所占的字符宽度
-unsigned short clacWidth(std::vector<CharInfo>& line) {
-    std::string s;
-    for (CharInfo& iter : line) {
-        s += iter.character;
-    }
-    return console_width(s);
 }
 
 // 读取文件内容到字符串
@@ -141,7 +136,7 @@ int main(int argc, char* argv[]) {
             }
         }
     } else {
-        std::cout << "输入的文件不存在！";
+        std::cout << "输入的文件或目录不存在！";
         return -1;
     }
 
@@ -200,11 +195,12 @@ int main(int argc, char* argv[]) {
             const char* ParaEnd      = p->Attribute("end");
             std::string agentAttr    = agentAttrRaw ? agentAttrRaw : "";
 
+            for (CharInfo& iter : single) singlePara.text += iter.character;
             singlePara.paraPos       = (agentAttr == "v2");
             singlePara.startTime     = parseTime(ParaBegin);
             singlePara.endTime       = parseTime(ParaEnd);
             singlePara.characters    = single;
-            singlePara.length        = clacWidth(single);
+            singlePara.length        = console_width(singlePara.text);
 
             lyrics.push_back(singlePara);
         }
@@ -218,9 +214,8 @@ int main(int argc, char* argv[]) {
     }
 
     // 计算歌词的最大宽度
-    for (Para& iter : lyrics) if (iter.length > width && iter.paraPos) 
+    for (Para& iter : lyrics) if (iter.paraPos && iter.length > width) 
         width = iter.length;
-
     width += 5;
 
     // 隐藏控制台光标
@@ -239,7 +234,12 @@ int main(int argc, char* argv[]) {
 	while ((now = GetTickCount() - startTime) <= finalTime + 1000) {
 		for (unsigned short s=topParaIdx; s<topParaIdx+DSPLINES; ++s) {
             if (s >= lyrics.size()) break;
-            if (now < lyrics[s].startTime || now > lyrics[s].endTime + 50) continue;
+            if (!lyrics[s].status) continue;
+            if (now > lyrics[s].endTime) {
+                lyrics[s].status = 0;
+                continue;
+            } else if (now < lyrics[s].startTime) lyrics[s].status = 1;
+            else lyrics[s].status = 2;
 
 			for (CharInfo& iter : lyrics[s].characters) {
 				if (now < iter.startTime) iter.color = NORCOLOR;
