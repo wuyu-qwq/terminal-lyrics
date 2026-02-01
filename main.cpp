@@ -5,7 +5,7 @@
 // 输出ttml文件列表的一页
 void outPage(std::vector<std::string>& files, unsigned short pages) {
 	--pages;
-	system("cls");
+    std::cout << "\033[2J\033[H";
 	for (unsigned short s=pages*10; s<pages*10+10 && s<files.size(); ++s) 
         std::cout << s-pages*10 << ' ' << files[s] << std::endl;
 	std::cout << "\nPage:" << pages+1 << " / " << files.size()/10+1 << std::endl;

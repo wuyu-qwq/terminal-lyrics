@@ -45,10 +45,9 @@ void outLyrics(std::vector<Para>& lyrics, unsigned short idx) {
         if (lyrics[s].paraPos) p.append(width-lyrics[s].length, ' ');
         if (!lyrics[s].status) p += FINCOLOR + lyrics[s].text + COLOREND;
         else if (lyrics[s].status == 1) p += NORCOLOR + lyrics[s].text + COLOREND;
-        else if (s < lyrics.size()) {
-            for (CharInfo& iter : lyrics[s].characters) 
+        else if (s < lyrics.size())
+            for (CharInfo& iter : lyrics[s].characters)
                 p += iter.color + iter.character + COLOREND;
-        }
 		p += "\033[K\n";
 	}
 	std::cout << p << "\033[H" << std::flush;
@@ -62,27 +61,20 @@ int parseTime(const char* timeStr) {
     return 0; // 解析失败返回0
 }
 
-// 读取文件内容到字符串
-std::string readFileContent(const std::string& filestr) {
-    std::filesystem::path filepath = std::filesystem::u8path(filestr);
-    std::ifstream file(filepath, std::ios::binary);
-    if (!file.is_open()) return "";
-    file.seekg(0, std::ios::end);
-    size_t size = file.tellg();
-    file.seekg(0, std::ios::beg);
-    std::string content(size, '\0');
-    file.read(&content[0], size);
-    file.close();
-    return content;
-}
-
-int launch(std::string filepath) {
+int launch(std::filesystem::path filepath) {
     std::vector<Para> lyrics;
     unsigned short topParaIdx = 0;
     unsigned short curIndex   = 0;
 
 	// 读取文件内容
-    std::string xmlContent = readFileContent(filepath);
+    std::ifstream file(filepath, std::ios::binary);
+    file.seekg(0, std::ios::end);
+    size_t size = file.tellg();
+    file.seekg(0, std::ios::beg);
+    std::string xmlContent(size, '\0');
+    if (!file.is_open()) xmlContent = "";
+    file.read(&xmlContent[0], size);
+    file.close();
     if (xmlContent.empty()) {
         std::cerr << "文件内容为空或读取失败" << std::endl;
         return 1;
@@ -165,7 +157,7 @@ int launch(std::string filepath) {
 
 	const DWORD startTime = GetTickCount();
 	DWORD now;
-	system("cls");
+	std::cout << "\033[2J\033[H";
 
     // 计算结束时间 (最后一行最后一个字的结束时间)
     unsigned int finalTime = 0;
@@ -199,5 +191,10 @@ int launch(std::string filepath) {
 	}
 
     for (unsigned short s=1; s-1<=DSPLINES; ++s) std::cout << "\n";
+
+    // 重新显示控制台光标
+	cursor_info = {1, 1};
+	SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursor_info);
+
     return 0;
 }
