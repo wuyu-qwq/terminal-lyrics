@@ -4,6 +4,8 @@
 #include <windows.h>
 #include <vector>
 #include <string>
+#include <algorithm>
+#include <cmath>
 
 #include "tinyxml2/tinyxml2.h"
 #include "getStringWidthInTerminal.hpp"
@@ -30,7 +32,7 @@ struct CharInfo {
 
 struct Para {
     bool paraPos;              // 段落位置，true为居右
-    unsigned short status = 2; // 这个段落的状态（0播放完毕1未播放）
+    unsigned short status = 1; // 这个段落的状态（0播放完毕1未播放）
     unsigned short length;     // 这行歌词在控制台中占据的字符宽度
     unsigned int startTime;
     unsigned int endTime;
@@ -53,12 +55,78 @@ void outLyrics(std::vector<Para>& lyrics, unsigned short idx) {
 	std::cout << p << "\033[H" << std::flush;
 }
 
-// 时间字符串解析函数
+// 时间字符串解析函数（增强版）
+// 支持格式：hh:mm:ss.mmm, mm:ss.mmm, s.sss, s
 int parseTime(const char* timeStr) {
-	unsigned int minutes, seconds, milliseconds;
-    if (sscanf(timeStr, "%d:%d.%d", &minutes, &seconds, &milliseconds)==3)
-        return minutes*60000 + seconds*1000 + milliseconds;
-    return 0; // 解析失败返回0
+    if (!timeStr) return 0;
+    std::string s = timeStr;
+    // trim
+    auto ltrim = [](std::string &str){
+        size_t p = str.find_first_not_of(" \t\r\n");
+        if (p == std::string::npos) str.clear();
+        else if (p) str.erase(0, p);
+    };
+    auto rtrim = [](std::string &str){
+        size_t p = str.find_last_not_of(" \t\r\n");
+        if (p == std::string::npos) str.clear();
+        else if (p+1 < str.size()) str.erase(p+1);
+    };
+    ltrim(s); rtrim(s);
+    if (s.empty()) return 0;
+
+    try {
+        size_t colonCount = std::count(s.begin(), s.end(), ':');
+
+        auto parseSecAndFrac = [](const std::string &part) -> std::pair<int,int> {
+            // 返回 {seconds, milliseconds}
+            size_t dot = part.find('.');
+            if (dot == std::string::npos) {
+                int sec = std::stoi(part);
+                return { sec, 0 };
+            } else {
+                std::string secPart = part.substr(0, dot);
+                std::string fracPart = part.substr(dot+1);
+                int sec = secPart.empty() ? 0 : std::stoi(secPart);
+                // 只取前 3 位小数并补齐
+                if (fracPart.size() > 3) fracPart = fracPart.substr(0,3);
+                while (fracPart.size() < 3) fracPart.push_back('0');
+                int ms = std::stoi(fracPart);
+                return { sec, ms };
+            }
+        };
+
+        if (colonCount == 2) {
+            // hh:mm:ss(.mmm)
+            size_t p1 = s.find(':');
+            size_t p2 = s.find(':', p1+1);
+            std::string hStr = s.substr(0, p1);
+            std::string mStr = s.substr(p1+1, p2-p1-1);
+            std::string rest = s.substr(p2+1);
+            int h = hStr.empty() ? 0 : std::stoi(hStr);
+            int m = mStr.empty() ? 0 : std::stoi(mStr);
+            auto [sec, ms] = parseSecAndFrac(rest);
+            long totalMs = (long)h*3600*1000 + (long)m*60*1000 + (long)sec*1000 + ms;
+            return (int)totalMs;
+        } else if (colonCount == 1) {
+            // mm:ss(.mmm)
+            size_t p = s.find(':');
+            std::string mStr = s.substr(0, p);
+            std::string rest = s.substr(p+1);
+            int m = mStr.empty() ? 0 : std::stoi(mStr);
+            auto [sec, ms] = parseSecAndFrac(rest);
+            long totalMs = (long)m*60*1000 + (long)sec*1000 + ms;
+            return (int)totalMs;
+        } else {
+            // seconds or seconds.fraction
+            // 使用 stod 以支持小数秒
+            double secf = std::stod(s);
+            if (secf < 0) return 0;
+            long totalMs = (long)std::llround(secf * 1000.0);
+            return (int)totalMs;
+        }
+    } catch (...) {
+        return 0; // 解析失败返回0
+    }
 }
 
 int launch(std::filesystem::path filepath) {
