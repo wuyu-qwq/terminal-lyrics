@@ -1,14 +1,12 @@
 #if defined (_WIN32)
 #include <windows.h>
-#define FLUSH_INTERVAL 20
-void sleep(auto seconds) Sleep(seconds);
 
 #elif defined (__linux__)
-#define FLUSH_INTERVAL 0.2
 #include <unistd.h>
 extern "C" {
     #include <sys/time.h>
 }
+unsigned int Sleep(unsigned int seconds) return sleep(seconds / 1000);
 #endif
 
 #include <iostream>
@@ -22,8 +20,9 @@ extern "C" {
 #include "tinyxml2/tinyxml2.h"
 #include "getStringWidthInTerminal.hpp"
 
-#define DSPLINES 15 // 显示行数
-#define ROLLINES 10 // 滚动行数
+#define DSPLINES 15       // 显示行数
+#define ROLLINES 10       // 滚动行数
+#define FLUSH_INTERVAL 20 // 刷新间隔
  
 #define NORCOLOR "\033[37m" // 常规颜色
 #define ACTCOLOR "\033[32m" // 活动颜色
@@ -277,7 +276,7 @@ int launch(std::filesystem::path filepath) {
 			topParaIdx = curIndex - ROLLINES;
 			outLyrics(lyrics, topParaIdx);
 		} else outLyrics(lyrics, topParaIdx);
-		sleep(FLUSH_INTERVAL);
+		Sleep(FLUSH_INTERVAL);
 	}
 
     for (unsigned short s=1; s-1<=DSPLINES; ++s) std::cout << "\n";

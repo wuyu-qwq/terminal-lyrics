@@ -7,8 +7,9 @@ int main(int argc, char *argv[]) {
     int argcW;
     LPWSTR* argvW = CommandLineToArgvW(GetCommandLineW(), &argcW);
     if (argcW <= 1) {
-#endif
+#elif defined (_linux_)
     if (argc <= 1) {
+#endif
         std::cout << "Please input the ttml file path in argument!";
         return -1;
     }
