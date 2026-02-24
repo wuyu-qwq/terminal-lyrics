@@ -6,7 +6,6 @@
 extern "C" {
     #include <sys/time.h>
 }
-unsigned int Sleep(unsigned int seconds) return sleep(seconds / 1000);
 #endif
 
 #include <iostream>
@@ -276,7 +275,11 @@ int launch(std::filesystem::path filepath) {
 			topParaIdx = curIndex - ROLLINES;
 			outLyrics(lyrics, topParaIdx);
 		} else outLyrics(lyrics, topParaIdx);
-		Sleep(FLUSH_INTERVAL);
+        #if defined (_WIN32)
+            Sleep(FLUSH_INTERVAL);
+        #elif defined (_linux_)
+		    sleep(FLUSH_INTERVAL / 1000);
+        #endif
 	}
 
     for (unsigned short s=1; s-1<=DSPLINES; ++s) std::cout << "\n";
