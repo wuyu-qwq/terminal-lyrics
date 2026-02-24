@@ -277,7 +277,7 @@ int launch(std::filesystem::path filepath) {
 		} else outLyrics(lyrics, topParaIdx);
         #if defined (_WIN32)
             Sleep(FLUSH_INTERVAL);
-        #elif defined (_linux_)
+        #elif defined (__linux__)
 		    sleep(FLUSH_INTERVAL / 1000);
         #endif
 	}
