@@ -1,7 +1,16 @@
+#if defined (_WIN32)
+#include <windows.h>
+
+#elif defined (__linux__)
+#include <unistd.h>
+extern "C" {
+    #include <sys/time.h>
+}
+#endif
+
 #include <iostream>
 #include <fstream>
 #include <filesystem>
-#include <windows.h>
 #include <vector>
 #include <string>
 #include <algorithm>
@@ -10,16 +19,14 @@
 #include "tinyxml2/tinyxml2.h"
 #include "getStringWidthInTerminal.hpp"
 
-#define DSPLINES 15 // 显示行数
-#define ROLLINES 10 // 滚动行数
-//#define WIDTH    60 // 歌词宽度
+#define DSPLINES 15       // 显示行数
+#define ROLLINES 10       // 滚动行数
+#define FLUSH_INTERVAL 20 // 刷新间隔
  
 #define NORCOLOR "\033[37m" // 常规颜色
 #define ACTCOLOR "\033[32m" // 活动颜色
 #define FINCOLOR "\033[90m" // 完成颜色
 #define COLOREND "\033[0m"  // 颜色结束符
-
-#define FLUSH_INTERVAL 20 // 刷新间隔
 
 unsigned short width;
 
@@ -57,7 +64,7 @@ void outLyrics(std::vector<Para>& lyrics, unsigned short idx) {
 
 // 时间字符串解析函数（增强版）
 // 支持格式：hh:mm:ss.mmm, mm:ss.mmm, s.sss, s
-int parseTime(const char* timeStr) {
+unsigned int parseTime(const char* timeStr) {
     if (!timeStr) return 0;
     std::string s = timeStr;
     // trim
@@ -127,6 +134,21 @@ int parseTime(const char* timeStr) {
     } catch (...) {
         return 0; // 解析失败返回0
     }
+}
+
+// 获取时间
+unsigned int getTime() {
+#if defined (_WIN32)
+    return GetTickCount();
+
+#elif defined (__linux__)
+    struct timeval now;
+
+    int rc=gettimeofday(&now, nullptr);
+    if (rc!=0) return -1;
+
+    return (now.tv_sec * 1000) + (now.tv_usec / 1000);
+#endif
 }
 
 int launch(std::filesystem::path filepath) {
@@ -219,12 +241,10 @@ int launch(std::filesystem::path filepath) {
         width = iter.length;
     width += 5;
 
-    // 隐藏控制台光标
-	CONSOLE_CURSOR_INFO cursor_info = {1, 0};
-	SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursor_info);
+    std::cout << "\033[?25l";
 
-	const DWORD startTime = GetTickCount();
-	DWORD now;
+    const unsigned int startTime = getTime();
+    unsigned int now;
 	std::cout << "\033[2J\033[H";
 
     // 计算结束时间 (最后一行最后一个字的结束时间)
@@ -232,7 +252,7 @@ int launch(std::filesystem::path filepath) {
     if (!lyrics.empty() && !lyrics.back().characters.empty()) 
         finalTime = lyrics.back().characters.back().endTime;
 
-	while ((now = GetTickCount() - startTime) <= finalTime + 1000) {
+	while ((now = getTime() - startTime) <= finalTime + 1000) {
 		for (unsigned short s=topParaIdx; s<topParaIdx+DSPLINES; ++s) {
             if (s >= lyrics.size()) break;
             if (!lyrics[s].status) continue;
@@ -255,14 +275,15 @@ int launch(std::filesystem::path filepath) {
 			topParaIdx = curIndex - ROLLINES;
 			outLyrics(lyrics, topParaIdx);
 		} else outLyrics(lyrics, topParaIdx);
-		Sleep(FLUSH_INTERVAL);
+        #if defined (_WIN32)
+            Sleep(FLUSH_INTERVAL);
+        #elif defined (__linux__)
+		    sleep(FLUSH_INTERVAL / 1000);
+        #endif
 	}
 
     for (unsigned short s=1; s-1<=DSPLINES; ++s) std::cout << "\n";
-
-    // 重新显示控制台光标
-	cursor_info = {1, 1};
-	SetConsoleCursorInfo(GetStdHandle(STD_OUTPUT_HANDLE), &cursor_info);
+    std::cout << "\033[?25h";
 
     return 0;
 }
